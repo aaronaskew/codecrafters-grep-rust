@@ -10,12 +10,18 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         input_line.contains(|c: char| c.is_ascii_digit())
     } else if pattern == "\\w" {
         input_line.contains(|c: char| c.is_ascii_alphanumeric() || c == '_')
-    } else if pattern.starts_with('[') && pattern.ends_with(']') {
+    } else if pattern.starts_with('[') && pattern.ends_with(']') && pattern.chars().count() > 2 {
         let mut group = pattern.chars().collect::<VecDeque<_>>();
         group.pop_front();
         group.pop_back();
 
-        input_line.contains(|c| group.contains(&c))
+        let is_negative_group = group[0] == '^';
+
+        if is_negative_group {
+            group.pop_front();
+        }
+
+        input_line.contains(|c| group.contains(&c)) && !is_negative_group
     } else {
         panic!("Unhandled pattern: {}", pattern)
     }
