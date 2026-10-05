@@ -5,12 +5,16 @@ use std::process;
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
     if pattern.chars().count() == 1 {
+        eprintln!("match single char");
         input_line.contains(pattern)
     } else if pattern == "\\d" {
+        eprintln!("match any digit");
         input_line.contains(|c: char| c.is_ascii_digit())
     } else if pattern == "\\w" {
+        eprintln!("match and letter, digit, or _");
         input_line.contains(|c: char| c.is_ascii_alphanumeric() || c == '_')
     } else if pattern.starts_with("[^") && pattern.ends_with(']') {
+        eprintln!("negative char group");
         let mut group = pattern.chars().collect::<VecDeque<_>>();
         group.pop_front();
         group.pop_front();
@@ -18,6 +22,7 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
 
         group.iter().any(|c| !input_line.contains(*c))
     } else if pattern.starts_with("[") && pattern.ends_with(']') {
+        eprintln!("positive char group");
         let mut group = pattern.chars().collect::<VecDeque<_>>();
         group.pop_front();
         group.pop_back();
