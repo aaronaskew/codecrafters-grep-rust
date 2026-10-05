@@ -7,6 +7,8 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         input_line.contains(pattern)
     } else if pattern == "\\d" {
         input_line.contains(|c: char| c.is_ascii_digit())
+    } else if pattern == "\\w" {
+        input_line.contains(|c: char| c.is_ascii_alphanumeric() || c == '_')
     } else {
         panic!("Unhandled pattern: {}", pattern)
     }
