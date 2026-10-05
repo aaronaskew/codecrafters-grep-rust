@@ -19,6 +19,7 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
     } else if pattern.starts_with("[^") && pattern.ends_with(']') {
         let mut group = pattern.chars().collect::<VecDeque<_>>();
         group.pop_front();
+        group.pop_front();
         group.pop_back();
 
         input_line.contains(|c| !group.contains(&c))
