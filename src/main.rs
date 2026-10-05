@@ -22,7 +22,7 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         group.pop_front();
         group.pop_back();
 
-        input_line.contains(|c| !group.contains(&c))
+        group.iter().any(|c| !input_line.contains(*c))
     } else {
         panic!("Unhandled pattern: {}", pattern)
     }
