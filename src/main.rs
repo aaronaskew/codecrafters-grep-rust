@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::env;
 use std::io;
 use std::process;
@@ -9,6 +10,12 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         input_line.contains(|c: char| c.is_ascii_digit())
     } else if pattern == "\\w" {
         input_line.contains(|c: char| c.is_ascii_alphanumeric() || c == '_')
+    } else if pattern.starts_with('[') && pattern.ends_with(']') {
+        let mut group = pattern.chars().collect::<VecDeque<_>>();
+        group.pop_front();
+        group.pop_back();
+
+        input_line.contains(|c| group.contains(&c))
     } else {
         panic!("Unhandled pattern: {}", pattern)
     }
