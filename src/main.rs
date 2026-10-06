@@ -68,7 +68,7 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
     }
 
     for match_kind in matches.iter().skip(1) {
-        eprint!("match: {match_kind:?} ");
+        eprintln!("match: {match_kind:?} ");
         if let Some(current_char) = input.pop_front() {
             eprintln!("current_char: {current_char}");
             if !matches_char(current_char, match_kind) {
