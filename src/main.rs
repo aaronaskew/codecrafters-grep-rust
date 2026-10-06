@@ -67,16 +67,14 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         }
     }
 
-    for match_kind in matches.iter().skip(1) {
-        eprintln!("match: {match_kind:?} ");
-        if let Some(current_char) = input.pop_front() {
-            eprintln!("current_char: {current_char}");
-            if !matches_char(current_char, match_kind) {
-                eprintln!("doesn't match char: \'{current_char}\'");
-                return false;
-            } else {
-                eprintln!("matches char: \'{current_char}\'");
-            }
+    for (match_kind, current_char) in matches.iter().skip(1).zip(input.iter()) {
+        eprintln!("match: {match_kind:?} current_char: {current_char}");
+
+        if !matches_char(*current_char, match_kind) {
+            eprintln!("doesn't match char: \'{current_char}\'");
+            return false;
+        } else {
+            eprintln!("matches char: \'{current_char}\'");
         }
     }
 
