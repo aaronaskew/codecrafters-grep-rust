@@ -3,34 +3,76 @@ use std::env;
 use std::io;
 use std::process;
 
-fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    if pattern.chars().count() == 1 {
-        eprintln!("match single char");
-        input_line.contains(pattern)
-    } else if pattern == "\\d" {
-        eprintln!("match any digit");
-        input_line.contains(|c: char| c.is_ascii_digit())
-    } else if pattern == "\\w" {
-        eprintln!("match and letter, digit, or _");
-        input_line.contains(|c: char| c.is_ascii_alphanumeric() || c == '_')
-    } else if pattern.starts_with("[^") && pattern.ends_with(']') {
-        eprintln!("negative char group");
-        let mut group = pattern.chars().collect::<VecDeque<_>>();
-        group.pop_front();
-        group.pop_front();
-        group.pop_back();
+mod parse;
 
-        group.iter().any(|c| !input_line.contains(*c))
-    } else if pattern.starts_with("[") && pattern.ends_with(']') {
-        eprintln!("positive char group");
-        let mut group = pattern.chars().collect::<VecDeque<_>>();
-        group.pop_front();
-        group.pop_back();
+#[derive(Debug)]
+enum MatchKind {
+    SingleChar(char),
+    Digit,
+    WordChar,
+    PositiveCharGroup(String),
+    NegativeCharGroup(String),
+}
 
-        input_line.contains(|c| group.contains(&c))
-    } else {
-        panic!("Unhandled pattern: {}", pattern)
+fn matches_char(current_char: char, match_kind: &MatchKind) -> bool {
+    match match_kind {
+        MatchKind::SingleChar(ch) => {
+            if current_char != *ch {
+                return false;
+            }
+        }
+        MatchKind::Digit => {
+            if !current_char.is_numeric() {
+                return false;
+            }
+        }
+        MatchKind::WordChar => {
+            if !(current_char.is_alphanumeric() || current_char == '_') {
+                return false;
+            }
+        }
+        MatchKind::PositiveCharGroup(group) => {
+            if !group.contains(current_char) {
+                return false;
+            }
+        }
+        MatchKind::NegativeCharGroup(group) => {
+            if group.contains(current_char) {
+                return false;
+            }
+        }
     }
+
+    true
+}
+
+fn match_pattern(input_line: &str, pattern: &str) -> bool {
+    let matches = parse::parse(pattern);
+    eprintln!("{matches:#?}");
+
+    let mut input = input_line.chars().collect::<VecDeque<_>>();
+
+    // find first char that matches pattern, if any
+    let first_match = matches.first().unwrap();
+    loop {
+        if let Some(current_char) = input.pop_front() {
+            if matches_char(current_char, first_match) {
+                break;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    for match_kind in matches.iter().skip(1) {
+        if let Some(current_char) = input.pop_front()
+            && !matches_char(current_char, match_kind)
+        {
+            return false;
+        }
+    }
+
+    true
 }
 
 // Usage: echo <input_text> | your_program.sh -E <pattern>
@@ -48,7 +90,6 @@ fn main() {
 
     io::stdin().read_line(&mut input_line).unwrap();
 
-    // TODO: Uncomment the code below to pass the first stage
     if match_pattern(&input_line, &pattern) {
         process::exit(0)
     } else {
