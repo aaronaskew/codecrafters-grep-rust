@@ -48,27 +48,34 @@ fn matches_char(current_char: char, match_kind: &MatchKind) -> bool {
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
     let matches = parse::parse(pattern);
-    eprintln!("{matches:#?}");
+    eprintln!("matches: {matches:#?}");
 
     let mut input = input_line.chars().collect::<VecDeque<_>>();
 
     // find first char that matches pattern, if any
     let first_match = matches.first().unwrap();
+    eprint!("first match: {first_match:?} ");
     loop {
         if let Some(current_char) = input.pop_front() {
             if matches_char(current_char, first_match) {
+                eprintln!("matches char: \'{current_char}\'");
                 break;
             }
         } else {
+            eprintln!("doesn't match any chars");
             return false;
         }
     }
 
     for match_kind in matches.iter().skip(1) {
-        if let Some(current_char) = input.pop_front()
-            && !matches_char(current_char, match_kind)
-        {
-            return false;
+        eprint!("match: {match_kind:?} ");
+        if let Some(current_char) = input.pop_front() {
+            if !matches_char(current_char, match_kind) {
+                eprintln!("doesn't match char: \'{current_char}\'");
+                return false;
+            } else {
+                eprintln!("matches char: \'{current_char}\'");
+            }
         }
     }
 
