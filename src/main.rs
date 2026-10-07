@@ -59,6 +59,10 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
 
     let mut input = input_line.chars().collect::<VecDeque<_>>();
 
+    if matcher.end_anchor {
+        input.pop_back();
+    }
+
     if matcher.start_anchor {
         if !matches_char(input.pop_front().unwrap(), matcher.matches.first().unwrap()) {
             return false;
