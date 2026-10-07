@@ -38,8 +38,29 @@ fn single_char(input: &str) -> IResult<&str, MatchKind> {
 fn parse_pattern(input: &str) -> IResult<&str, (bool, Vec<MatchKind>, bool)> {
     let char_vec = input.chars().collect::<Vec<_>>();
 
+    // Determine is there is a start anchor and remove the '^' if so
     let start_anchor = char_vec.first().unwrap() == &'^';
+    let input = if start_anchor {
+        input
+            .char_indices()
+            .nth(1) // Get the byte index of the 2nd character
+            .map(|(i, _)| &input[i..]) // Slice from that index to the end
+            .unwrap_or("") // Return empty string if string had 0 or 1 chars
+    } else {
+        input
+    };
+
+    // Determine if there is an end anchor and remove the '$' if so
     let end_anchor = char_vec.last().unwrap() == &'$';
+    let input = if end_anchor {
+        input
+            .char_indices()
+            .next_back() // Get the byte index of the last character
+            .map(|(i, _)| &input[..i]) // Slice from the start to that index
+            .unwrap_or(input) // Return original string if empty
+    } else {
+        input
+    };
 
     let Ok((input, match_vec)) = many1(alt((
         negative_group,
