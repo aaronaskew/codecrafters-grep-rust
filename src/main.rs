@@ -55,7 +55,7 @@ fn matches_char(current_char: char, match_kind: &MatchKind) -> bool {
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
     let matcher = parse::parse(pattern);
-    eprintln!("matches: {matcher:#?}");
+    eprintln!("matcher: {matcher:#?}");
 
     let mut input = input_line.chars().collect::<VecDeque<_>>();
 
