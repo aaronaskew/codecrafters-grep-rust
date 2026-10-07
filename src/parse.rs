@@ -4,8 +4,11 @@ use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::bytes::complete::take;
 use nom::character::complete::alpha1;
+use nom::combinator::eof;
 use nom::combinator::opt;
+use nom::multi::many_till;
 use nom::multi::many1;
+use nom::sequence::terminated;
 
 use crate::MatchKind;
 use crate::Matcher;
@@ -36,23 +39,25 @@ fn single_char(input: &str) -> IResult<&str, MatchKind> {
         .parse(input)
 }
 
-fn parse_pattern(input: &str) -> IResult<&str, (bool, Vec<MatchKind>, bool)> {
+fn parse_pattern(input: &str) -> IResult<&str, (bool, (Vec<MatchKind>, bool))> {
     (
         opt(tag("^")).map(|start_anchor| start_anchor.is_some()),
-        many1(alt((
-            negative_group,
-            positive_group,
-            digit,
-            word_char,
-            single_char,
-        ))),
-        opt(tag("$")).map(|end_anchor| end_anchor.is_some()),
+        many_till(
+            alt((
+                negative_group,
+                positive_group,
+                digit,
+                word_char,
+                single_char,
+            )),
+            opt(terminated(tag("$"), eof)).map(|end_anchor| end_anchor.is_some()),
+        ),
     )
         .parse(input)
 }
 
 pub fn parse(input: &str) -> Matcher {
-    let Ok((_, (start_anchor, matches, end_anchor))) = parse_pattern(input) else {
+    let Ok((_, (start_anchor, (matches, end_anchor)))) = parse_pattern(input) else {
         panic!("Cannot parse");
     };
 
