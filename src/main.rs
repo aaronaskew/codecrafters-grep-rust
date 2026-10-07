@@ -61,7 +61,16 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
 
     match (matcher.start_anchor, matcher.end_anchor) {
         (true, true) => {
-            todo!()
+            for (match_kind, current_char) in matcher.matches.iter().zip(input_vec.iter()) {
+                eprintln!("match: {match_kind:?} current_char: {current_char}");
+
+                if !matches_char(*current_char, match_kind) {
+                    eprintln!("doesn't match char: \'{current_char}\'");
+                    return false;
+                } else {
+                    eprintln!("matches char: \'{current_char}\'");
+                }
+            }
         }
         (true, false) => {
             todo!()
