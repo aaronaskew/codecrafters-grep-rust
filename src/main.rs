@@ -26,8 +26,8 @@ impl Matcher {
         self.matches.len()
     }
 
-    fn min_length(&self) -> usize {
-        todo!()
+    fn _min_length(&self) -> usize {
+        self.matches.len()
     }
 }
 
@@ -71,11 +71,9 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
 
     match (matcher.start_anchor, matcher.end_anchor) {
         (true, true) => {
-
             if input_vec.len() > matcher.max_length() {
                 return false;
             }
-
 
             for (match_kind, current_char) in matcher.matches.iter().zip(input_vec.iter()) {
                 eprintln!("match: {match_kind:?} current_char: {current_char}");
@@ -89,7 +87,16 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
             }
         }
         (true, false) => {
-            todo!()
+            for (match_kind, current_char) in matcher.matches.iter().zip(input_vec.iter()) {
+                eprintln!("match: {match_kind:?} current_char: {current_char}");
+
+                if !matches_char(*current_char, match_kind) {
+                    eprintln!("doesn't match char: \'{current_char}\'");
+                    return false;
+                } else {
+                    eprintln!("matches char: \'{current_char}\'");
+                }
+            }
         }
         (false, true) => {
             let input_vec_rev = input_vec.into_iter().rev().collect::<VecDeque<_>>();
