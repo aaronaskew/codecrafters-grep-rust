@@ -54,7 +54,7 @@ fn matches_char(current_char: char, match_kind: &MatchKind) -> bool {
 }
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    let matcher = parse::parse(pattern);
+    let mut matcher = parse::parse(pattern);
     eprintln!("matcher: {matcher:#?}");
 
     let mut input_vec = input_line.chars().collect::<VecDeque<_>>();
@@ -67,7 +67,23 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
             todo!()
         }
         (false, true) => {
-            todo!()
+            let input_vec_rev = input_vec.into_iter().rev().collect::<VecDeque<_>>();
+            matcher.matches.reverse();
+
+            if matcher.matches.len() > input_vec_rev.len() {
+                return false;
+            }
+
+            for (match_kind, current_char) in matcher.matches.iter().zip(input_vec_rev.iter()) {
+                eprintln!("match: {match_kind:?} current_char: {current_char}");
+
+                if !matches_char(*current_char, match_kind) {
+                    eprintln!("doesn't match char: \'{current_char}\'");
+                    return false;
+                } else {
+                    eprintln!("matches char: \'{current_char}\'");
+                }
+            }
         }
         (false, false) => {
             // find first char that matches pattern, if any
