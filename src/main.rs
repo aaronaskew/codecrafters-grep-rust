@@ -14,6 +14,13 @@ enum MatchKind {
     NegativeCharGroup(String),
 }
 
+#[derive(Debug)]
+struct Matcher {
+    matches: Vec<MatchKind>,
+    start_anchor: bool,
+    end_anchor: bool,
+}
+
 fn matches_char(current_char: char, match_kind: &MatchKind) -> bool {
     match match_kind {
         MatchKind::SingleChar(ch) => {
@@ -47,31 +54,41 @@ fn matches_char(current_char: char, match_kind: &MatchKind) -> bool {
 }
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    let matches = parse::parse(pattern);
-    eprintln!("matches: {matches:#?}");
+    let matcher = parse::parse(pattern);
+    eprintln!("matches: {matcher:#?}");
 
     let mut input = input_line.chars().collect::<VecDeque<_>>();
 
-    // find first char that matches pattern, if any
-    let first_match = matches.first().unwrap();
-    eprint!("first match: {first_match:?} ");
-    loop {
-        if let Some(current_char) = input.pop_front() {
-            if matches_char(current_char, first_match) {
-                eprintln!("matches char: \'{current_char}\'");
-                break;
-            }
-        } else {
-            eprintln!("doesn't match any chars");
+    if matcher.start_anchor {
+        if !matches_char(input.pop_front().unwrap(), matcher.matches.first().unwrap()) {
             return false;
+        }
+    } else {
+        // find first char that matches pattern, if any
+        let first_match = matcher.matches.first().unwrap();
+        eprint!("first match: {first_match:?} ");
+        loop {
+            if let Some(current_char) = input.pop_front() {
+                if matches_char(current_char, first_match) {
+                    eprintln!("matches char: \'{current_char}\'");
+                    break;
+                }
+            } else {
+                eprintln!("doesn't match any chars");
+                return false;
+            }
         }
     }
 
-    if matches.iter().skip(1).count() > input.len() {
+    if matcher.matches.iter().skip(1).count() > input.len() {
         return false;
     }
 
-    for (match_kind, current_char) in matches.iter().skip(1).zip(input.iter()) {
+    if matcher.end_anchor && matcher.matches.iter().skip(1).count() != input.len() {
+        return false;
+    }
+
+    for (match_kind, current_char) in matcher.matches.iter().skip(1).zip(input.iter()) {
         eprintln!("match: {match_kind:?} current_char: {current_char}");
 
         if !matches_char(*current_char, match_kind) {
