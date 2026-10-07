@@ -67,6 +67,10 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         }
     }
 
+    if matches.iter().skip(1).count() > input.len() {
+        return false;
+    }
+
     for (match_kind, current_char) in matches.iter().skip(1).zip(input.iter()) {
         eprintln!("match: {match_kind:?} current_char: {current_char}");
 
