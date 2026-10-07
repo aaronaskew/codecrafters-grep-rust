@@ -21,6 +21,16 @@ struct Matcher {
     end_anchor: bool,
 }
 
+impl Matcher {
+    fn max_length(&self) -> usize {
+        self.matches.len()
+    }
+
+    fn min_length(&self) -> usize {
+        todo!()
+    }
+}
+
 fn matches_char(current_char: char, match_kind: &MatchKind) -> bool {
     match match_kind {
         MatchKind::SingleChar(ch) => {
@@ -61,6 +71,12 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
 
     match (matcher.start_anchor, matcher.end_anchor) {
         (true, true) => {
+
+            if input_vec.len() > matcher.max_length() {
+                return false;
+            }
+
+
             for (match_kind, current_char) in matcher.matches.iter().zip(input_vec.iter()) {
                 eprintln!("match: {match_kind:?} current_char: {current_char}");
 
