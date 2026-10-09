@@ -114,16 +114,37 @@ impl Matcher {
         //     }
         // }
 
-        for (atom, current_char) in atoms.iter().zip(input_vec_deque.iter()) {
-            eprintln!("match: {atom:?} current_char: {current_char}");
+        let mut atom_iter = atoms.iter().peekable();
+        let mut char_iter = input_vec_deque.iter().peekable();
 
-            if !matches_char(*current_char, &atom.kind) {
-                eprintln!("doesn't match char: \'{current_char}\'");
-                return false;
+        loop {
+            if let Some(atom) = atom_iter.next()
+                && let Some(current_char) = char_iter.next()
+            {
+                eprintln!("match: {atom:?} current_char: {current_char}");
+
+                if !matches_char(*current_char, &atom.kind) {
+                    eprintln!("doesn't match char: \'{current_char}\'");
+                    return false;
+                } else {
+                    eprintln!("matches char: \'{current_char}\'");
+                    // if matches!(atom.quantifier , QuantifierKind::OneOrMore|Quan)
+                }
             } else {
-                eprintln!("matches char: \'{current_char}\'");
+                break;
             }
         }
+
+        // for (atom, current_char) in atoms.iter().zip(input_vec_deque.iter()) {
+        //     eprintln!("match: {atom:?} current_char: {current_char}");
+
+        //     if !matches_char(*current_char, &atom.kind) {
+        //         eprintln!("doesn't match char: \'{current_char}\'");
+        //         return false;
+        //     } else {
+        //         eprintln!("matches char: \'{current_char}\'");
+        //     }
+        // }
 
         true
     }
@@ -161,13 +182,8 @@ fn matches_char(current_char: char, atom_kind: &AtomKind) -> bool {
     true
 }
 
-fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    let mut matcher = parse::parse(pattern);
-    eprintln!("matcher: {matcher:#?}");
-
-    let mut input_vec_deque = input_line.chars().collect::<VecDeque<_>>();
-
-    match (matcher.has_start_anchor, matcher.has_end_anchor) {
+fn handle_anchors(mut matcher:  Matcher, mut input_vec_deque: VecDeque<char>) -> bool {
+  match (matcher.has_start_anchor, matcher.has_end_anchor) {
         (true, true) => {
             if input_vec_deque.len() > matcher.max_length()
                 || input_vec_deque.len() < matcher.min_length()
@@ -222,6 +238,17 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
     }
 
     true
+}
+
+fn match_pattern(input_line: &str, pattern: &str) -> bool {
+    let matcher = parse::parse(pattern);
+    eprintln!("matcher: {matcher:#?}");
+
+    let input_vec_deque = input_line.chars().collect::<VecDeque<_>>();
+
+    handle_anchors(matcher, input_vec_deque)
+
+    
 }
 
 // Usage: echo <input_text> | your_program.sh -E <pattern>
