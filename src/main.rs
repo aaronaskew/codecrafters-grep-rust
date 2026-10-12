@@ -5,10 +5,29 @@ use std::process;
 
 mod parse;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Atom {
     kind: AtomKind,
-    quantifier: Option<QuantifierKind>,
+    quantifier_opt: Option<QuantifierKind>,
+    minimum_satisfied: bool,
+}
+
+impl Atom {
+    fn match_required(&self) -> bool {
+        // - if current atom has no quantifier & minimum_satisfied is no, yes, otherwise no
+        // - if OneOrMore, if minimum already satisfied, no, else yes
+        // - if ZeroOrMore, no
+        // - if ZeroOrOne, no
+
+        if let Some(quantifier) = self.quantifier_opt {
+            match quantifier {
+                QuantifierKind::OneOrMore => !self.minimum_satisfied,
+                QuantifierKind::ZeroOrMore | QuantifierKind::ZeroOrOne => false,
+            }
+        } else {
+            !self.minimum_satisfied
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -18,7 +37,7 @@ enum QuantifierKind {
     ZeroOrOne,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum AtomKind {
     SingleChar(char),
     Digit,
@@ -35,9 +54,9 @@ struct Matcher {
 }
 
 impl Matcher {
-    fn max_length(&self) -> usize {
+    fn max_input_length(&self) -> usize {
         if self.atoms.iter().any(|atom| {
-            let Some(quantifier) = &atom.quantifier else {
+            let Some(quantifier) = &atom.quantifier_opt else {
                 return false;
             };
 
@@ -52,11 +71,11 @@ impl Matcher {
         self.atoms.len()
     }
 
-    fn min_length(&self) -> usize {
+    fn min_input_length(&self) -> usize {
         self.atoms
             .iter()
             .map(|atom| {
-                if let Some(quantifier) = &atom.quantifier {
+                if let Some(quantifier) = &atom.quantifier_opt {
                     if matches!(
                         quantifier,
                         QuantifierKind::ZeroOrMore | QuantifierKind::ZeroOrOne
@@ -72,17 +91,20 @@ impl Matcher {
             .sum()
     }
 
-    /// Consumes first characters of `input_vec_deque` until it matches (if at all) the first atom.
+    /// Consumes first characters of `chars` until it matches (if at all) the first atom.
     /// Consumes the first atom if the quantifier is None or ZeroOrOne
     /// Returns whether or not there was a match.
-    fn find_first_match(&mut self, input_vec_deque: &mut VecDeque<char>) -> bool {
+    fn find_first_match(&mut self, chars: &mut VecDeque<char>) -> bool {
+        // TODO: test for multiple starting characters
+
         // find first char that matches pattern, if any
         let first_atom = self.atoms.first().unwrap();
         eprint!("first atom: {first_atom:?} ");
         loop {
-            if let Some(current_char) = input_vec_deque.pop_front() {
-                if matches_char(current_char, &first_atom.kind) {
+            if let Some(current_char) = chars.pop_front() {
+                if Self::matches_char(current_char, first_atom) {
                     eprintln!("matches char: \'{current_char}\'");
+                    eprintln!("remaining chars: {chars:?}");
                     break;
                 }
             } else {
@@ -91,147 +113,224 @@ impl Matcher {
             }
         }
 
-        match first_atom.quantifier {
+        match first_atom.quantifier_opt {
             None | Some(QuantifierKind::ZeroOrOne) => {
                 self.atoms.remove(0);
             }
             _ => {}
         }
 
+        eprintln!("remaining atoms: {:?}", self.atoms);
+
         true
     }
 
-    fn match_atoms(atoms: Vec<Atom>, input_vec_deque: VecDeque<char>) -> bool {
-        // for char_i in 0..input_vec_deque.len() {
-        //     for atom_i in 0..atoms.len() {
-        //         if char_i > 0 && atom_i > 0 {
-        //             if matches_char(input_vec_deque[char_i], &atoms[atom_i].kind)
-        //                 && matches_char(input_vec_deque[char_i], &atoms[atom_i - 1].kind)
-        //             {
-        //                 // Previous
-        //             }
-        //         }
-        //     }
-        // }
+    fn matches_char(current_char: char, atom: &Atom) -> bool {
+        match &atom.kind {
+            AtomKind::SingleChar(ch) => {
+                if current_char != *ch {
+                    return false;
+                }
+            }
+            AtomKind::Digit => {
+                if !current_char.is_numeric() {
+                    return false;
+                }
+            }
+            AtomKind::WordChar => {
+                if !(current_char.is_alphanumeric() || current_char == '_') {
+                    return false;
+                }
+            }
+            AtomKind::PositiveCharGroup(group) => {
+                if !group.contains(current_char) {
+                    return false;
+                }
+            }
+            AtomKind::NegativeCharGroup(group) => {
+                if group.contains(current_char) {
+                    return false;
+                }
+            }
+        }
 
-        let mut atom_iter = atoms.iter().peekable();
-        let mut char_iter = input_vec_deque.iter().peekable();
+        true
+    }
+
+    fn match_atoms(atoms: Vec<Atom>, chars: Vec<char>) -> bool {
+        let mut atom_iter = atoms.into_iter().enumerate().peekable();
+        let mut char_iter = chars.iter().enumerate().peekable();
+
+        let mut advance_char = Some(false);
+        let mut current_char_opt = char_iter.next();
+
+        let mut advance_atom = Some(false);
+        let mut current_atom_opt = atom_iter.next();
 
         loop {
-            if let Some(atom) = atom_iter.next()
-                && let Some(current_char) = char_iter.next()
-            {
-                eprintln!("match: {atom:?} current_char: {current_char}");
+            if advance_char.is_some_and(|advance| advance) {
+                eprintln!("advance_char=true, current_char before: {current_char_opt:?}");
+                current_char_opt = char_iter.next();
+                eprintln!("advance_char=true, current_char after: {current_char_opt:?}");
+            }
 
-                if !matches_char(*current_char, &atom.kind) {
-                    eprintln!("doesn't match char: \'{current_char}\'");
-                    return false;
-                } else {
-                    eprintln!("matches char: \'{current_char}\'");
-                    // if matches!(atom.quantifier , QuantifierKind::OneOrMore|Quan)
+            if advance_atom.is_some_and(|advance| advance) {
+                eprintln!("advance_atom=true, current_atom before: {current_atom_opt:?}");
+                current_atom_opt = atom_iter.next();
+                eprintln!("advance_atom=true, current_atom after: {current_atom_opt:?}");
+            }
+
+            // dbg!(&current_char_opt, &current_atom_opt);
+
+            advance_atom = None;
+            advance_char = None;
+
+            match (current_atom_opt.as_mut(), current_char_opt) {
+                // All atoms satisfied, return true
+                (None, _) => {
+                    return true;
                 }
-            } else {
-                break;
+                // No more characters, check that no match is required of this and subsequent atoms
+                (Some((_, current_atom)), None) => {
+                    if current_atom.match_required() {
+                        return false;
+                    } else {
+                        advance_atom = Some(true);
+                        advance_char = Some(false);
+                        continue;
+                    }
+                }
+                // Character & Atom available
+                (
+                    Some(&mut (_current_atom_pos, ref mut current_atom)),
+                    Some((_current_char_pos, current_char)),
+                ) => {
+                    if current_atom.match_required() {
+                        eprintln!("match required");
+
+                        if !Self::matches_char(*current_char, current_atom) {
+                            return false;
+                        }
+
+                        // Match required and matched - advance char do not advance Atom
+                        current_atom.minimum_satisfied = true;
+                        advance_char = Some(true);
+                        advance_atom = Some(false);
+                    } else {
+                        // Match not required
+                        match current_atom.quantifier_opt {
+                            // Match not required and quantifier exists
+                            Some(quantifier) => match quantifier {
+                                QuantifierKind::OneOrMore => {
+                                    // TODO: Do some depth/breadth first search madness
+
+                                    // test if next atom will match this char. if so, advance atom but not char
+                                    if let Some((_, next_atom)) = atom_iter.peek() {
+                                        if Self::matches_char(*current_char, next_atom) {
+                                            advance_atom = Some(true);
+                                            advance_char = Some(false);
+                                        }
+                                    } else {
+                                        // Next atom doesn't match this char
+                                        if !Self::matches_char(*current_char, current_atom) {
+                                            return false;
+                                        }
+
+                                        // This atom matches this char. Advance char but not atom.
+                                        advance_char = Some(true);
+                                        advance_atom = Some(false);
+                                    }
+                                }
+                                QuantifierKind::ZeroOrMore => todo!(),
+                                QuantifierKind::ZeroOrOne => todo!(),
+                            },
+                            // no quantifier
+                            None => {
+                                // Match not required and no quantifier: advance atom. do not advance char
+                                advance_atom = Some(true);
+                                advance_char = Some(false);
+                            }
+                        }
+                    }
+                }
             }
+
+            assert!(advance_atom.is_some() && advance_char.is_some());
+
+            eprintln!(
+                "Match!: Atom: {:?} char: {}",
+                current_atom_opt
+                    .clone()
+                    .expect("current_atom_opt should be some if there was a match")
+                    .1,
+                current_char_opt
+                    .expect("current_char_opt should be some if there was a match")
+                    .1
+            );
+
+            eprintln!(
+                "advance_atom: {} advance_char: {}",
+                advance_atom.unwrap(),
+                advance_char.unwrap()
+            );
         }
-
-        // for (atom, current_char) in atoms.iter().zip(input_vec_deque.iter()) {
-        //     eprintln!("match: {atom:?} current_char: {current_char}");
-
-        //     if !matches_char(*current_char, &atom.kind) {
-        //         eprintln!("doesn't match char: \'{current_char}\'");
-        //         return false;
-        //     } else {
-        //         eprintln!("matches char: \'{current_char}\'");
-        //     }
-        // }
-
-        true
     }
 }
 
-fn matches_char(current_char: char, atom_kind: &AtomKind) -> bool {
-    match atom_kind {
-        AtomKind::SingleChar(ch) => {
-            if current_char != *ch {
-                return false;
-            }
-        }
-        AtomKind::Digit => {
-            if !current_char.is_numeric() {
-                return false;
-            }
-        }
-        AtomKind::WordChar => {
-            if !(current_char.is_alphanumeric() || current_char == '_') {
-                return false;
-            }
-        }
-        AtomKind::PositiveCharGroup(group) => {
-            if !group.contains(current_char) {
-                return false;
-            }
-        }
-        AtomKind::NegativeCharGroup(group) => {
-            if group.contains(current_char) {
-                return false;
-            }
-        }
-    }
-
-    true
-}
-
-fn handle_anchors(mut matcher:  Matcher, mut input_vec_deque: VecDeque<char>) -> bool {
-  match (matcher.has_start_anchor, matcher.has_end_anchor) {
+fn handle_anchors(mut matcher: Matcher, mut chars: VecDeque<char>) -> bool {
+    match (matcher.has_start_anchor, matcher.has_end_anchor) {
         (true, true) => {
-            if input_vec_deque.len() > matcher.max_length()
-                || input_vec_deque.len() < matcher.min_length()
+            if chars.len() > matcher.max_input_length() || chars.len() < matcher.min_input_length()
             {
                 return false;
             }
 
-            if !Matcher::match_atoms(matcher.atoms, input_vec_deque) {
+            if !Matcher::match_atoms(matcher.atoms, Vec::from(chars)) {
                 return false;
             }
         }
         (true, false) => {
-            if input_vec_deque.len() < matcher.min_length() {
+            if chars.len() < matcher.min_input_length() {
                 return false;
             }
 
-            if !Matcher::match_atoms(matcher.atoms, input_vec_deque) {
+            if !Matcher::match_atoms(matcher.atoms, Vec::from(chars)) {
                 return false;
             }
         }
         (false, true) => {
-            if input_vec_deque.len() < matcher.min_length() {
+            if chars.len() < matcher.min_input_length() {
                 return false;
             }
 
-            let input_vec_deque_rev = input_vec_deque.into_iter().rev().collect::<VecDeque<_>>();
+            // If only end anchor, work from back to front.
             matcher.atoms.reverse();
+            matcher.has_start_anchor = !matcher.has_start_anchor;
+            matcher.has_end_anchor = !matcher.has_end_anchor;
+            let chars = chars.into_iter().rev().collect::<Vec<_>>();
 
-            if !Matcher::match_atoms(matcher.atoms, input_vec_deque_rev) {
+            if !Matcher::match_atoms(matcher.atoms, chars) {
                 return false;
             }
         }
         (false, false) => {
-            dbg!(&input_vec_deque.len(), &matcher.min_length());
+            dbg!(&chars.len(), &matcher.min_input_length());
 
-            if input_vec_deque.len() < matcher.min_length() {
+            if chars.len() < matcher.min_input_length() {
                 return false;
             }
 
-            if !matcher.find_first_match(&mut input_vec_deque) {
+            if !matcher.find_first_match(&mut chars) {
                 return false;
             }
 
-            if input_vec_deque.len() < matcher.min_length() {
+            dbg!(&chars.len(), &matcher.min_input_length());
+
+            if chars.len() < matcher.min_input_length() {
                 return false;
             }
 
-            if !Matcher::match_atoms(matcher.atoms, input_vec_deque) {
+            if !Matcher::match_atoms(matcher.atoms, Vec::from(chars)) {
                 return false;
             }
         }
@@ -244,11 +343,9 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
     let matcher = parse::parse(pattern);
     eprintln!("matcher: {matcher:#?}");
 
-    let input_vec_deque = input_line.chars().collect::<VecDeque<_>>();
+    let chars = input_line.chars().collect::<VecDeque<_>>();
 
-    handle_anchors(matcher, input_vec_deque)
-
-    
+    handle_anchors(matcher, chars)
 }
 
 // Usage: echo <input_text> | your_program.sh -E <pattern>

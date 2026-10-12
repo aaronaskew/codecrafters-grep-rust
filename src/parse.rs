@@ -39,7 +39,7 @@ fn single_char(input: &str) -> IResult<&str, AtomKind> {
         .parse(input)
 }
 
-fn quantifier(input: &str) -> IResult<&str, QuantifierKind> {
+fn quantifier_opt(input: &str) -> IResult<&str, QuantifierKind> {
     alt((char('+'), char('*'), char('?')))
         .map(|c| match c {
             '+' => QuantifierKind::OneOrMore,
@@ -86,9 +86,13 @@ fn parse_pattern(input: &str) -> IResult<&str, (bool, Vec<Atom>, bool)> {
                 word_char,
                 single_char,
             )),
-            opt(quantifier),
+            opt(quantifier_opt),
         )
-            .map(|(kind, quantifier)| Atom { kind, quantifier }),
+            .map(|(kind, quantifier_opt)| Atom {
+                kind,
+                quantifier_opt,
+                minimum_satisfied: false,
+            }),
     )
     .parse(input) else {
         panic!()
