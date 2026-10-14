@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::env;
 use std::io;
 use std::process;
@@ -54,15 +55,74 @@ struct AtomMatcher {
 }
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
-struct AtomNode {
-    atom: Atom,
-    num_chars_to_consume_opt: Option<usize>,
-    start_char_idx: usize,
+struct SequenceNode {
+    sequence: Vec<AtomNode>,
+}
+
+impl SequenceNode {
+    /// Generates all valid combinations of AtomNodes for the given atoms
+    /// `max_chars` is the total number of characters the entire sequence is allowed to consume.
+    pub fn build_all(atoms: &[Atom], max_chars: usize) -> Vec<SequenceNode> {
+        let mut results = Vec::new();
+        let mut current_path = Vec::new();
+
+        Self::backtrack(
+            atoms,
+            0,         // Start at the first atom
+            max_chars, // Initial characters available to consume
+            &mut current_path,
+            &mut results,
+        );
+
+        results
+    }
+
+    fn backtrack(
+        atoms: &[Atom],
+        atom_idx: usize,
+        remaining_chars: usize,
+        current_path: &mut Vec<AtomNode>,
+        results: &mut Vec<SequenceNode>,
+    ) {
+        // Base case: We have successfully assigned consumptions to all atoms
+        if atom_idx == atoms.len() {
+            results.push(SequenceNode {
+                sequence: current_path.clone(),
+            });
+            return;
+        }
+
+        // Generate the possible configurations for the current Atom based on remaining space
+        let base_node = AtomNode::from_atom(atoms[atom_idx].clone());
+        let children = base_node.generate_children(remaining_chars);
+
+        // DFS: Explore each possible consumption amount
+        for child in children {
+            // Determine how many chars this specific child consumes
+            let consumed = child.num_chars_to_consume_opt.unwrap_or(0);
+
+            // Push onto the sequence
+            current_path.push(child);
+
+            // Recurse to the next atom, subtracting the consumed characters from the limit
+            Self::backtrack(
+                atoms,
+                atom_idx + 1,
+                remaining_chars.saturating_sub(consumed),
+                current_path,
+                results,
+            );
+
+            // Pop off to evaluate the next sibling configuration
+            current_path.pop();
+        }
+    }
 }
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
-struct SequenceNode {
-    seqeunce: Vec<AtomNode>,
+struct AtomNode {
+    atom: Atom,
+    num_chars_to_consume_opt: Option<usize>,
 }
 
 impl AtomNode {
@@ -70,7 +130,6 @@ impl AtomNode {
         Self {
             atom,
             num_chars_to_consume_opt: None,
-            start_char_idx: 0,
         }
     }
 
@@ -84,7 +143,6 @@ impl AtomNode {
                         children.push(AtomNode {
                             atom: self.atom.clone(),
                             num_chars_to_consume_opt: Some(i),
-                            start_char_idx: 0,
                         })
                     }
                 }
@@ -93,7 +151,6 @@ impl AtomNode {
                         children.push(AtomNode {
                             atom: self.atom.clone(),
                             num_chars_to_consume_opt: Some(i),
-                            start_char_idx: 0,
                         })
                     }
                 }
@@ -102,7 +159,6 @@ impl AtomNode {
                         children.push(AtomNode {
                             atom: self.atom.clone(),
                             num_chars_to_consume_opt: Some(i),
-                            start_char_idx: 0,
                         })
                     }
                 }
@@ -110,7 +166,6 @@ impl AtomNode {
             None => children.push(AtomNode {
                 atom: self.atom.clone(),
                 num_chars_to_consume_opt: Some(1),
-                start_char_idx: 0,
             }),
         }
 
@@ -225,53 +280,110 @@ impl AtomMatcher {
     }
 
     fn match_dfs(&self, chars: Vec<char>) -> bool {
-        let mut seq_visited: HashSet<Vec<AtomNode>> = HashSet::new();
-        let mut seq_stack: Vec<Vec<AtomNode>> = vec![];
+        //let mut seq_visited: HashSet<SequenceNode> = HashSet::new();
+        //let mut seq_stack: Vec<SequenceNode> = vec![];
 
         // TODO: build sequence stack
-        // maybe create another node type for the sequence of nodes
 
-        // self.atoms
-        //     .clone()
-        //     .into_iter()
-        //     .rev()
-        //     .flat_map(|atom| Node::from_atom(atom).generate_children(chars.len()))
-        //     .collect();
+        let mut sequences = SequenceNode::build_all(&self.atoms, chars.len());
 
-        while let Some(mut curr_sequence) = seq_stack.pop() {
-            if seq_visited.contains(&curr_sequence) {
-                continue;
-            }
+        sequences.reverse();
 
-            let mut node_visited: HashSet<AtomNode> = HashSet::new();
-            let mut node_stack: Vec<AtomNode> = vec![];
-            while let Some(curr_node) = curr_sequence.pop() {
-                if node_visited.contains(&curr_node) {
-                    continue;
-                }
+        dbg!(&sequences);
 
-                eprintln!(
-                    "Visiting Node -> Atom: {:?}, num_chars_to_consume: {:?}\n",
-                    curr_node.atom, curr_node.num_chars_to_consume_opt
-                );
-                node_visited.insert(curr_node.clone());
+        'sequence: for sequence_node in sequences {
+            let mut sequence = VecDeque::from(sequence_node.sequence);
 
-                let children = curr_node.generate_children(chars.len());
-                for child in children.into_iter() {
-                    if !node_visited.contains(&child) {
-                        node_stack.push(child);
+            let mut test_chars = VecDeque::from(chars.clone());
+
+            while let Some(AtomNode {
+                atom,
+                num_chars_to_consume_opt: Some(num_chars_to_consume),
+            }) = sequence.pop_front()
+            {
+                let mut chars_consumed = 0;
+                for _ in 0..num_chars_to_consume {
+                    if let Some(current_char) = test_chars.pop_front() {
+                        if !AtomMatcher::matches_char(current_char, &atom) {
+                            break;
+                        } else {
+                            chars_consumed += 1;
+                        }
+                    } else {
+                        break;
                     }
                 }
+
+                if chars_consumed < num_chars_to_consume {
+                    continue 'sequence;
+                }
+            }
+
+            if sequence.is_empty() {
+                return true;
             }
         }
 
-        todo!()
+        // while let Some(mut curr_sequence_node) = sequences.pop() {
+        //     // if seq_visited.contains(&curr_sequence_node) {
+        //     //     continue;
+        //     // }
+        //     curr_sequence_node.sequence.reverse();
+
+        //     let mut test_chars = chars.clone();
+        //     // test_chars.reverse();
+        //     let mut node_visited: HashSet<AtomNode> = HashSet::new();
+        //     let mut node_stack: Vec<AtomNode> = vec![];
+        //     while let Some(curr_atom_node) = curr_sequence_node.sequence.pop() {
+        //         if node_visited.contains(&curr_atom_node) {
+        //             continue;
+        //         }
+
+        //         if let Some(curr_char) = test_chars.pop() {
+        //             eprintln!(
+        //                 "Visiting Node -> Atom: {:?}, num_chars_to_consume: {:?}, curr_char: {curr_char}\n",
+        //                 curr_atom_node.atom, curr_atom_node.num_chars_to_consume_opt
+        //             );
+
+        //             if AtomMatcher::matches_char(curr_char, &curr_atom_node.atom) {
+        //                 continue;
+        //             } else {
+        //                 return false;
+        //             }
+
+        //             node_visited.insert(curr_atom_node.clone());
+
+        //             let children = curr_atom_node.generate_children(chars.len());
+        //             for child in children.into_iter() {
+        //                 if !node_visited.contains(&child) {
+        //                     node_stack.push(child);
+        //                 }
+        //             }
+        //         } else {
+        //             let remaining_chars_to_consume = curr_sequence_node
+        //                 .sequence
+        //                 .iter()
+        //                 .map(|a| a.num_chars_to_consume_opt.unwrap_or(0))
+        //                 .sum::<usize>();
+
+        //             if remaining_chars_to_consume > 0 {
+        //                 continue;
+        //             }
+        //         }
+        //     }
+
+        //     if curr_sequence_node.sequence.is_empty() {
+        //         return true;
+        //     }
+        // }
+
+        false
     }
 }
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
     let atom_matcher = parse::parse(pattern);
-    eprintln!("atom_matcher: {atom_matcher:#?}");
+    // eprintln!("atom_matcher: {atom_matcher:#?}");
 
     // let chars = input_line.chars().collect::<VecDeque<_>>();
     let chars = input_line.chars().collect();
