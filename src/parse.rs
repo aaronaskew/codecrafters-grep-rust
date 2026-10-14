@@ -10,7 +10,7 @@ use nom::multi::many1;
 
 use crate::Atom;
 use crate::AtomKind;
-use crate::Matcher;
+use crate::AtomMatcher;
 use crate::QuantifierKind;
 
 fn negative_group(input: &str) -> IResult<&str, AtomKind> {
@@ -101,12 +101,12 @@ fn parse_pattern(input: &str) -> IResult<&str, (bool, Vec<Atom>, bool)> {
     Ok((input, (start_anchor, atom_vec, end_anchor)))
 }
 
-pub fn parse(input: &str) -> Matcher {
+pub fn parse(input: &str) -> AtomMatcher {
     let Ok((_, (has_start_anchor, atoms, has_end_anchor))) = parse_pattern(input) else {
         panic!("Cannot parse");
     };
 
-    Matcher {
+    AtomMatcher {
         atoms,
         has_start_anchor,
         has_end_anchor,
