@@ -26,6 +26,7 @@ enum AtomKind {
     PositiveCharGroup(String),
     NegativeCharGroup(String),
     Wildcard,
+    Alternation(Vec<Vec<AtomKind>>),
 }
 
 #[derive(Debug)]
@@ -194,35 +195,60 @@ impl AtomMatcher {
             .sum()
     }
 
-    fn matches_char(current_char: char, atom: &Atom) -> bool {
+    fn matches_str(current_str: &str, atom: &Atom) -> bool {
+        assert!(!current_str.is_empty());
+
         match &atom.kind {
             AtomKind::SingleChar(ch) => {
-                if current_char != *ch {
+                if current_str.len() != 1 || current_str.chars().next().unwrap() != *ch {
                     return false;
                 }
             }
             AtomKind::Digit => {
-                if !current_char.is_numeric() {
+                if current_str.len() != 1 || !current_str.chars().next().unwrap().is_numeric() {
                     return false;
                 }
             }
             AtomKind::WordChar => {
-                if !(current_char.is_alphanumeric() || current_char == '_') {
+                if current_str.len() != 1
+                    || !current_str.chars().next().unwrap().is_alphanumeric()
+                    || !current_str.starts_with('_')
+                {
                     return false;
                 }
             }
             AtomKind::PositiveCharGroup(group) => {
-                if !group.contains(current_char) {
+                if current_str.len() != 1 || !group.contains(current_str.chars().next().unwrap()) {
                     return false;
                 }
             }
             AtomKind::NegativeCharGroup(group) => {
-                if group.contains(current_char) {
+                if current_str.len() != 1 || group.contains(current_str.chars().next().unwrap()) {
                     return false;
                 }
             }
             AtomKind::Wildcard => {
-                if current_char == '\n' {
+                if current_str.len() != 1 || current_str.starts_with('\n') {
+                    return false;
+                }
+            }
+            AtomKind::Alternation(patterns) => {
+                if !patterns.iter().any(|pattern| {
+                    let mut found_match = false;
+                    for atom in pattern.iter().map(|atom_kind| Atom {
+                        kind: atom_kind.clone(),
+                        quantifier_opt: None,
+                    }) {
+                        if current_str
+                            .chars()
+                            .all(|ch| AtomMatcher::matches_str(&ch.to_string(), &atom))
+                        {
+                            found_match = true;
+                        }
+                    }
+
+                    found_match
+                }) {
                     return false;
                 }
             }
@@ -245,7 +271,7 @@ impl AtomMatcher {
                 let first_atom = self.atoms.first().unwrap();
                 let mut idx = None;
                 for (i, ch) in chars.clone().into_iter().enumerate() {
-                    if AtomMatcher::matches_char(ch, first_atom) {
+                    if AtomMatcher::matches_str(&ch.to_string(), first_atom) {
                         idx = Some(i);
                         break;
                     }
@@ -303,7 +329,7 @@ impl AtomMatcher {
                 let mut chars_consumed = 0;
                 for _ in 0..num_chars_to_consume {
                     if let Some(current_char) = test_chars.pop_front() {
-                        if !AtomMatcher::matches_char(current_char, &atom) {
+                        if !AtomMatcher::matches_str(&current_char.to_string(), &atom) {
                             break;
                         } else {
                             chars_consumed += 1;

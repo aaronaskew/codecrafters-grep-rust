@@ -1,12 +1,12 @@
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::bytes::complete::take;
-use nom::character::complete::alpha1;
-use nom::character::complete::char;
-use nom::combinator::opt;
-use nom::multi::many1;
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    bytes::complete::{tag, take},
+    character::complete::{alpha1, char},
+    combinator::opt,
+    multi::{many1, separated_list1},
+    sequence::delimited,
+};
 
 use crate::Atom;
 use crate::AtomKind;
@@ -41,6 +41,29 @@ fn single_char(input: &str) -> IResult<&str, AtomKind> {
 
 fn wildcard(input: &str) -> IResult<&str, AtomKind> {
     tag(".").map(|_| AtomKind::Wildcard).parse(input)
+}
+
+fn alternation(input: &str) -> IResult<&str, AtomKind> {
+    delimited(
+        char('('),
+        separated_list1(char('|'), many1(atom_kind)),
+        char(')'),
+    )
+    .map(AtomKind::Alternation)
+    .parse(input)
+}
+
+fn atom_kind(input: &str) -> IResult<&str, AtomKind> {
+    alt((
+        negative_group,
+        positive_group,
+        alternation,
+        digit,
+        word_char,
+        wildcard,
+        single_char,
+    ))
+    .parse(input)
 }
 
 fn quantifier_opt(input: &str) -> IResult<&str, QuantifierKind> {
@@ -81,23 +104,12 @@ fn parse_pattern(input: &str) -> IResult<&str, (bool, Vec<Atom>, bool)> {
         input
     };
 
-    let Ok((input, atom_vec)) = many1(
-        (
-            alt((
-                negative_group,
-                positive_group,
-                digit,
-                word_char,
-                wildcard,
-                single_char,
-            )),
-            opt(quantifier_opt),
-        )
-            .map(|(kind, quantifier_opt)| Atom {
-                kind,
-                quantifier_opt,
-            }),
-    )
+    let Ok((input, atom_vec)) = many1((atom_kind, opt(quantifier_opt)).map(
+        |(kind, quantifier_opt)| Atom {
+            kind,
+            quantifier_opt,
+        },
+    ))
     .parse(input) else {
         panic!()
     };
