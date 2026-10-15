@@ -25,6 +25,7 @@ enum AtomKind {
     WordChar,
     PositiveCharGroup(String),
     NegativeCharGroup(String),
+    Wildcard,
 }
 
 #[derive(Debug)]
@@ -217,6 +218,11 @@ impl AtomMatcher {
             }
             AtomKind::NegativeCharGroup(group) => {
                 if group.contains(current_char) {
+                    return false;
+                }
+            }
+            AtomKind::Wildcard => {
+                if current_char == '\n' {
                     return false;
                 }
             }

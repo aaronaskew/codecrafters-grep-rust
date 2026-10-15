@@ -39,6 +39,10 @@ fn single_char(input: &str) -> IResult<&str, AtomKind> {
         .parse(input)
 }
 
+fn wildcard(input: &str) -> IResult<&str, AtomKind> {
+    tag(".").map(|_| AtomKind::Wildcard).parse(input)
+}
+
 fn quantifier_opt(input: &str) -> IResult<&str, QuantifierKind> {
     alt((char('+'), char('*'), char('?')))
         .map(|c| match c {
@@ -84,6 +88,7 @@ fn parse_pattern(input: &str) -> IResult<&str, (bool, Vec<Atom>, bool)> {
                 positive_group,
                 digit,
                 word_char,
+                wildcard,
                 single_char,
             )),
             opt(quantifier_opt),
