@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
 use std::io;
@@ -10,25 +9,6 @@ mod parse;
 struct Atom {
     kind: AtomKind,
     quantifier_opt: Option<QuantifierKind>,
-    minimum_satisfied: bool,
-}
-
-impl Atom {
-    fn _match_required(&self) -> bool {
-        // - if current atom has no quantifier & minimum_satisfied is no, yes, otherwise no
-        // - if OneOrMore, if minimum already satisfied, no, else yes
-        // - if ZeroOrMore, no
-        // - if ZeroOrOne, no
-
-        if let Some(quantifier) = self.quantifier_opt {
-            match quantifier {
-                QuantifierKind::OneOrMore => !self.minimum_satisfied,
-                QuantifierKind::ZeroOrMore | QuantifierKind::ZeroOrOne => false,
-            }
-        } else {
-            !self.minimum_satisfied
-        }
-    }
 }
 
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq)]
@@ -176,7 +156,7 @@ impl AtomNode {
 }
 
 impl AtomMatcher {
-    fn max_input_length(&self) -> usize {
+    fn _max_input_length(&self) -> usize {
         if self.atoms.iter().any(|atom| {
             let Some(quantifier) = &atom.quantifier_opt else {
                 return false;
@@ -193,7 +173,7 @@ impl AtomMatcher {
         self.atoms.len()
     }
 
-    fn min_input_length(&self) -> usize {
+    fn _min_input_length(&self) -> usize {
         self.atoms
             .iter()
             .map(|atom| {
@@ -212,40 +192,6 @@ impl AtomMatcher {
             })
             .sum()
     }
-
-    // /// Consumes first characters of `chars` until it matches (if at all) the first atom.
-    // /// Consumes the first atom if the quantifier is None or ZeroOrOne
-    // /// Returns whether or not there was a match.
-    // fn find_first_match(&mut self, chars: &mut VecDeque<char>) -> bool {
-    //     // TODO: test for multiple starting characters
-
-    //     // find first char that matches pattern, if any
-    //     let first_atom = self.atoms.first().unwrap();
-    //     eprint!("first atom: {first_atom:?} ");
-    //     loop {
-    //         if let Some(current_char) = chars.pop_front() {
-    //             if Self::matches_char(current_char, first_atom) {
-    //                 eprintln!("matches char: \'{current_char}\'");
-    //                 eprintln!("remaining chars: {chars:?}");
-    //                 break;
-    //             }
-    //         } else {
-    //             eprintln!("doesn't match any chars");
-    //             return false;
-    //         }
-    //     }
-
-    //     match first_atom.quantifier_opt {
-    //         None | Some(QuantifierKind::ZeroOrOne) => {
-    //             self.atoms.remove(0);
-    //         }
-    //         _ => {}
-    //     }
-
-    //     eprintln!("remaining atoms: {:?}", self.atoms);
-
-    //     true
-    // }
 
     fn matches_char(current_char: char, atom: &Atom) -> bool {
         match &atom.kind {
@@ -280,10 +226,45 @@ impl AtomMatcher {
     }
 
     fn match_dfs(&self, chars: Vec<char>) -> bool {
-        //let mut seq_visited: HashSet<SequenceNode> = HashSet::new();
-        //let mut seq_stack: Vec<SequenceNode> = vec![];
+        // handle anchors and find first char
+        let chars = chars.clone();
 
-        // TODO: build sequence stack
+        let mut require_all_chars_match = false;
+        let mut back_to_front = false;
+
+        let first_char_idx = match (self.has_start_anchor, self.has_end_anchor) {
+            // no anchors
+            (false, false) => {
+                // find first match
+                let first_atom = self.atoms.first().unwrap();
+                let mut idx = None;
+                for (i, ch) in chars.clone().into_iter().enumerate() {
+                    if AtomMatcher::matches_char(ch, first_atom) {
+                        idx = Some(i);
+                        break;
+                    }
+                }
+                if let Some(idx) = idx {
+                    idx
+                } else {
+                    // There is no matching first character
+                    // TODO: handle zero or more
+                    return false;
+                }
+            }
+            // start and end anchor
+            (true, true) => {
+                require_all_chars_match = true;
+                0
+            }
+            // start anchor only
+            (true, false) => 0,
+            // end anchor only
+            (false, true) => {
+                back_to_front = true;
+                0
+            }
+        };
 
         let mut sequences = SequenceNode::build_all(&self.atoms, chars.len());
 
@@ -294,7 +275,19 @@ impl AtomMatcher {
         'sequence: for sequence_node in sequences {
             let mut sequence = VecDeque::from(sequence_node.sequence);
 
+            if back_to_front {
+                sequence = sequence.into_iter().rev().collect();
+            }
+
             let mut test_chars = VecDeque::from(chars.clone());
+
+            if back_to_front {
+                test_chars = test_chars.into_iter().rev().collect();
+            }
+
+            for _ in 0..first_char_idx {
+                test_chars.pop_front();
+            }
 
             while let Some(AtomNode {
                 atom,
@@ -314,68 +307,27 @@ impl AtomMatcher {
                     }
                 }
 
+                eprintln!(
+                    "require_all_chars_match: {}, chars_consumed: {}, num_chars_to_consume: {}, test_chars.len(): {}",
+                    require_all_chars_match,
+                    chars_consumed,
+                    num_chars_to_consume,
+                    test_chars.len()
+                );
+
                 if chars_consumed < num_chars_to_consume {
                     continue 'sequence;
                 }
             }
 
             if sequence.is_empty() {
-                return true;
+                if require_all_chars_match && !test_chars.is_empty() {
+                    continue;
+                } else {
+                    return true;
+                }
             }
         }
-
-        // while let Some(mut curr_sequence_node) = sequences.pop() {
-        //     // if seq_visited.contains(&curr_sequence_node) {
-        //     //     continue;
-        //     // }
-        //     curr_sequence_node.sequence.reverse();
-
-        //     let mut test_chars = chars.clone();
-        //     // test_chars.reverse();
-        //     let mut node_visited: HashSet<AtomNode> = HashSet::new();
-        //     let mut node_stack: Vec<AtomNode> = vec![];
-        //     while let Some(curr_atom_node) = curr_sequence_node.sequence.pop() {
-        //         if node_visited.contains(&curr_atom_node) {
-        //             continue;
-        //         }
-
-        //         if let Some(curr_char) = test_chars.pop() {
-        //             eprintln!(
-        //                 "Visiting Node -> Atom: {:?}, num_chars_to_consume: {:?}, curr_char: {curr_char}\n",
-        //                 curr_atom_node.atom, curr_atom_node.num_chars_to_consume_opt
-        //             );
-
-        //             if AtomMatcher::matches_char(curr_char, &curr_atom_node.atom) {
-        //                 continue;
-        //             } else {
-        //                 return false;
-        //             }
-
-        //             node_visited.insert(curr_atom_node.clone());
-
-        //             let children = curr_atom_node.generate_children(chars.len());
-        //             for child in children.into_iter() {
-        //                 if !node_visited.contains(&child) {
-        //                     node_stack.push(child);
-        //                 }
-        //             }
-        //         } else {
-        //             let remaining_chars_to_consume = curr_sequence_node
-        //                 .sequence
-        //                 .iter()
-        //                 .map(|a| a.num_chars_to_consume_opt.unwrap_or(0))
-        //                 .sum::<usize>();
-
-        //             if remaining_chars_to_consume > 0 {
-        //                 continue;
-        //             }
-        //         }
-        //     }
-
-        //     if curr_sequence_node.sequence.is_empty() {
-        //         return true;
-        //     }
-        // }
 
         false
     }

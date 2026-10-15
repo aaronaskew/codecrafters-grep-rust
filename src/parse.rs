@@ -91,7 +91,6 @@ fn parse_pattern(input: &str) -> IResult<&str, (bool, Vec<Atom>, bool)> {
             .map(|(kind, quantifier_opt)| Atom {
                 kind,
                 quantifier_opt,
-                minimum_satisfied: false,
             }),
     )
     .parse(input) else {
